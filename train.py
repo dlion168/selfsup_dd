@@ -5,10 +5,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from torchvision.models import resnet18
+# from torchvision.models import resnet18
+from models.tera import tera
 
-from data.wrapper import get_loader
-from data.augmentation import NUM_CLASSES
+from data.wrapper import get_pretrain_loader #get_loader
+# from data.augmentation import NUM_CLASSES
 from algorithms.wrapper import get_algorithm
 from utils import InfIterator, Logger
 from model_pool import ModelPool
@@ -25,39 +26,48 @@ def main(args):
     torch.manual_seed(args.seed)
 
     # data
-    args.img_shape = (3, args.img_size, args.img_size)    
-    dl, _, _, _ = get_loader(args.data_dir, args.data_name, args.outer_batch_size, args.img_size, False)
+    # args.img_shape = (3, args.img_size, args.img_size) 
+    args.img_shape = (1, args.img_size)    
+    dl = get_pretrain_loader(batch_size = args.pre_batch_size)
     iter_tr = InfIterator(dl)
-    dl_tr, dl_te, aug_tr, aug_te = get_loader(args.data_dir, args.data_name, args.test_batch_size, args.img_size, True)
+    # dl_tr, dl_te, aug_tr, aug_te = get_loader(args.data_dir, args.data_name, args.test_batch_size, args.img_size, True)
 
     # target model
-    if args.data_name == "imagenette":
-        target_model = torch.hub.load('facebookresearch/barlowtwins:main', 'resnet50')
-        target_model.fc = nn.Identity()
-        target_model = target_model.to(device)    
-    else:
-        target_model = resnet18()
-        target_model.fc = nn.Identity()
-        target_model.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=2, bias=False)
-        target_model.maxpool = nn.Identity()
-        target_model = target_model.to(device)      
-        target_model.load_state_dict(torch.load(f"./teacher_ckpt/barlow_twins_resnet18_{args.data_name}.pt", map_location="cpu")) 
+    # if args.data_name == "imagenette":
+    #     target_model = torch.hub.load('facebookresearch/barlowtwins:main', 'resnet50')
+    #     target_model.fc = nn.Identity()
+    #     target_model = target_model.to(device)    
+    # else:
+    #     target_model = resnet18()
+    #     target_model.fc = nn.Identity()
+    #     target_model.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=2, bias=False)
+    #     target_model.maxpool = nn.Identity()
+    #     target_model = target_model.to(device)      
+    #     target_model.load_state_dict(torch.load(f"./teacher_ckpt/barlow_twins_resnet18_{args.data_name}.pt", map_location="cpu")) 
+    
+    target_model = tera().to(device)
         
     # get features
     target_model.eval()
+    # TODO: pad or trim the real audio x to 10 seconds (160000 samples) before used as synthetic data.
     with torch.no_grad():
         x_syn, y_syn = torch.FloatTensor([]), torch.FloatTensor([])
         while x_syn.shape[0] < args.num_images:
-            x, y = next(iter_tr)
+            x = next(iter_tr)
+            if x.shape[1] < args.img_size:
+                pad_len = args.img_size - x.shape[1]
+                x = torch.nn.functional.pad(x, (0, pad_len, 0, 0))
+            elif x.shape[1] > args.img_size:
+                x = x[:,:args.img_size]
             x_syn = torch.cat([x_syn, x], dim=0)
             x = x.to(device)
-            x = aug_te(x)
+            # x = aug_te(x)
             y = target_model(x).cpu()
             torch.cuda.empty_cache() 
             y_syn = torch.cat([y_syn, y], dim=0)
 
-    args.num_pretrain_classes = y_syn.shape[-1]
-    args.num_classes = NUM_CLASSES[args.data_name]
+    # args.num_pretrain_classes = y_syn.shape[-1]
+    # args.num_classes = NUM_CLASSES[args.data_name]
     
     # x_syn, y_syn
     x_syn, y_syn = x_syn[:args.num_images].to(device), y_syn[:args.num_images].to(device)
@@ -92,24 +102,24 @@ def main(args):
 
     # algo
     train_algo = get_algorithm("distill")
-    pretrain = get_algorithm("pretrain_krr_st")
-    test_algo = get_algorithm("linear_eval")
+    # pretrain = get_algorithm("pretrain_krr_st")
+    # test_algo = get_algorithm("linear_eval")
 
     # outer loop
     for outer_step in range(1, args.outer_iteration+1):
         
         # meta train
         loss = train_algo.run(
-            args, device, target_model, model_pool, outer_opt, iter_tr, aug_tr, x_syn, y_syn)
+            args, device, target_model, model_pool, outer_opt, iter_tr, None, x_syn, y_syn) # set sug_tr to None for debugging
         logger.meter("meta_train", "mse loss", loss)
 
         # meta test
-        if outer_step % args.eval_every == 0 or outer_step == args.outer_iteration:
-            init_model = pretrain.run(args, device, args.test_model, x_syn, y_syn)
-            loss, acc = test_algo.run(args, device, args.test_model, init_model, dl_tr, dl_te, aug_tr, aug_te)
-            del init_model
-            logger.meter(f"meta_test", "loss", loss)
-            logger.meter(f"meta_test", "accuracy", acc)
+        # if outer_step % args.eval_every == 0 or outer_step == args.outer_iteration:
+        #     init_model = pretrain.run(args, device, args.test_model, x_syn, y_syn)
+        #     loss, acc = test_algo.run(args, device, args.test_model, init_model, dl_tr, dl_te, aug_tr, aug_te)
+        #     del init_model
+        #     logger.meter(f"meta_test", "loss", loss)
+        #     logger.meter(f"meta_test", "accuracy", acc)
             
         outer_sch.step()
         logger.step()
@@ -137,14 +147,14 @@ if __name__ == '__main__':
 
     # hparms for online
     parser.add_argument('--online_opt', type=str, default="sgd")
-    parser.add_argument('--online_iteration', type=int, default=1000)
+    parser.add_argument('--online_iteration', type=int, default=450)
     parser.add_argument('--online_lr', type=float, default=0.1)
     parser.add_argument('--online_wd', type=float, default=1e-3)
 
     # hparms for pretrain
     parser.add_argument('--pre_opt', type=str, default="sgd")
-    parser.add_argument('--pre_epoch', type=int, default=1000)
-    parser.add_argument('--pre_batch_size', type=int, default=256)
+    parser.add_argument('--pre_epoch', type=int, default=450)
+    parser.add_argument('--pre_batch_size', type=int, default=32)
     parser.add_argument('--pre_lr', type=float, default=0.1)
     parser.add_argument('--pre_wd', type=float, default=1e-3)
 
@@ -172,26 +182,31 @@ if __name__ == '__main__':
     parser.add_argument('--gpu_id', type=int, default=0)
     args = parser.parse_args()
 
-    if args.data_name == "cifar100":
-        args.img_size = 32
-        args.num_images = 1000
-        args.train_model = "convnet_128_256_512_bn"
-        args.test_model = "convnet_128_256_512_bn"
-    elif args.data_name == "tinyimagenet":
-        args.img_size = 64
-        args.num_images = 2000
-        args.train_model = "convnet_64_128_256_512_bn"
-        args.test_model = "convnet_64_128_256_512_bn"
-    elif args.data_name == "imagenet":
-        args.img_size = 64
-        args.num_images = 1000
-        args.train_model = "convnet_64_128_256_512_bn"
-        args.test_model = "convnet_64_128_256_512_bn"
-    elif args.data_name == "imagenette":
-        args.img_size = 224
-        args.num_images = 10
-        args.train_model = "convnet_32_64_128_256_512_bn"
-        args.test_model = "convnet_32_64_128_256_512_bn"
+    # if args.data_name == "cifar100":
+    #     args.img_size = 32
+    #     args.num_images = 1000
+    #     args.train_model = "convnet_128_256_512_bn"
+    #     args.test_model = "convnet_128_256_512_bn"
+    # elif args.data_name == "tinyimagenet":
+    #     args.img_size = 64
+    #     args.num_images = 2000
+    #     args.train_model = "convnet_64_128_256_512_bn"
+    #     args.test_model = "convnet_64_128_256_512_bn"
+    # elif args.data_name == "imagenet":
+    #     args.img_size = 64
+    #     args.num_images = 1000
+    #     args.train_model = "convnet_64_128_256_512_bn"
+    #     args.test_model = "convnet_64_128_256_512_bn"
+    # elif args.data_name == "imagenette":
+    #     args.img_size = 224
+    #     args.num_images = 10
+    #     args.train_model = "convnet_32_64_128_256_512_bn"
+    #     args.test_model = "convnet_32_64_128_256_512_bn"
+    if args.data_name == "librispeech100":
+        args.img_size = 160000
+        args.num_images = 360
+        args.train_model = "tera_100hr"
+        args.test_model = "tera_100hr"
     else:
         raise NotImplementedError
 

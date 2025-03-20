@@ -1,4 +1,5 @@
 from algorithms import distill
+from algorithms import distill_from_model
 
 from algorithms import pretrain_dc
 from algorithms import pretrain_frepo

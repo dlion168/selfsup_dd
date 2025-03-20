@@ -1,0 +1,7 @@
+load_pretrain: "False"
+no_grad: "False"
+dropout: "default"
+spec_aug: "False"
+spec_aug_prev: "True"
+output_hidden_states: "True"
+permute_input: "False"

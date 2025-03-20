@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import TensorDataset, DataLoader
-
-from data.augmentation import get_aug
+from data.librispeech import get_dataloader as get_ls_dataloader
+# from data.augmentation import get_aug
 
 def get_loader(root_dir, data_name, batch_size, size=32, aug=False):
     X_tr, Y_tr = torch.load(f"{root_dir}/{data_name}/X_tr_{size}.pth"), torch.load(f"{root_dir}/{data_name}/Y_tr_{size}.pth")
@@ -16,6 +16,20 @@ def get_loader(root_dir, data_name, batch_size, size=32, aug=False):
         dataloader_te = DataLoader(dataset_te, batch_size=batch_size, num_workers=0, shuffle=False, pin_memory=True)   
     
 
-    transform_tr, transform_te = get_aug(data_name, size, aug)
+    # transform_tr, transform_te = get_aug(data_name, size, aug)
 
-    return dataloader_tr, dataloader_te, transform_tr, transform_te
+    return dataloader_tr, dataloader_te #, transform_tr, transform_te
+
+def get_pretrain_loader(batch_size):
+    # X_tr, Y_tr = torch.load(f"{root_dir}/{data_name}/X_tr_{size}.pth"), torch.load(f"{root_dir}/{data_name}/Y_tr_{size}.pth")
+    # dataset_tr = TensorDataset(X_tr, Y_tr)
+    dataloader_tr = get_ls_dataloader(batch_size=batch_size, shuffle=True, num_workers=0)  
+
+    return dataloader_tr
+
+def get_eval_loader(batch_size):
+    # X_tr, Y_tr = torch.load(f"{root_dir}/{data_name}/X_tr_{size}.pth"), torch.load(f"{root_dir}/{data_name}/Y_tr_{size}.pth")
+    # dataset_tr = TensorDataset(X_tr, Y_tr)
+    dataloader_tr = get_ls_dataloader(batch_size=batch_size, sets=["dev-clean"], shuffle=False, num_workers=0)  
+
+    return dataloader_tr

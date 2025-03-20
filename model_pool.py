@@ -13,7 +13,7 @@ class ModelPool:
         self.num_models = args.num_models
 
         # model func
-        self.model_func = lambda _: get_model(args.train_model, args.img_shape, args.num_pretrain_classes).to(device)
+        self.model_func = lambda _: get_model(args.train_model).to(device) 
 
         # opt func
         if args.online_opt == "sgd":

@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import kornia.augmentation as K
+# import kornia.augmentation as K
 
 NUM_CLASSES = {
     'svhn': 10,
@@ -83,25 +83,25 @@ STD = {
     'imagenette': (0.2804, 0.2754, 0.2965)}
 }
 
-def get_aug(data_name, size, aug=True):
-    if aug:
-        if data_name == "svhn":
-            transform_tr = nn.Sequential(
-                K.RandomCrop(size=(size,size), padding=4),
-                K.Normalize(MEAN[size][data_name], STD[size][data_name])
-            )
-        else:   
-            transform_tr = nn.Sequential(                
-                K.RandomCrop(size=(size,size), padding=4),
-                K.RandomHorizontalFlip(p=0.5),
-                K.Normalize(MEAN[size][data_name], STD[size][data_name]),                
-            )        
-    else:
-        transform_tr = K.Normalize(MEAN[size][data_name], STD[size][data_name])
+# def get_aug(data_name, size, aug=True):
+#     if aug:
+#         if data_name == "svhn":
+#             transform_tr = nn.Sequential(
+#                 K.RandomCrop(size=(size,size), padding=4),
+#                 K.Normalize(MEAN[size][data_name], STD[size][data_name])
+#             )
+#         else:   
+#             transform_tr = nn.Sequential(                
+#                 K.RandomCrop(size=(size,size), padding=4),
+#                 K.RandomHorizontalFlip(p=0.5),
+#                 K.Normalize(MEAN[size][data_name], STD[size][data_name]),                
+#             )        
+#     else:
+#         transform_tr = K.Normalize(MEAN[size][data_name], STD[size][data_name])
     
-    transform_te = K.Normalize(MEAN[size][data_name], STD[size][data_name])
+#     transform_te = K.Normalize(MEAN[size][data_name], STD[size][data_name])
 
-    return transform_tr, transform_te
+#     return transform_tr, transform_te
 
 """DC Augmentation"""
 class ParamDiffAug():

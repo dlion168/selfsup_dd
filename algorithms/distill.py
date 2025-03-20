@@ -22,7 +22,7 @@ def run(
     x_real = x_real.to(device)
     target_model.eval()
     with torch.no_grad():
-        x_real = aug(x_real)
+        # x_real = aug(x_real)
         y_real = target_model(x_real)
         torch.cuda.empty_cache() 
 
