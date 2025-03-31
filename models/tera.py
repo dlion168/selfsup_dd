@@ -26,4 +26,4 @@ class tera(nn.Module):
 
         output = self.model(wavs)
         
-        return torch.stack(output["hidden_states"][self.layers], dim=0)
+        return torch.stack([output["hidden_states"][l] for l in self.layers], dim=0)
